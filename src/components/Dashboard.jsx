@@ -1,8 +1,8 @@
 import { useMemo, useState } from 'react'
 import { Box, Button, Grid, HStack, Input, Text, VStack } from '@chakra-ui/react'
-import { FiFileText, FiFolder, FiImage, FiPlus, FiUploadCloud } from 'react-icons/fi'
+import { FiFileText, FiFolder, FiImage, FiPlus, FiTrash2, FiUploadCloud } from 'react-icons/fi'
 
-function Dashboard({ notes, pdfs, images, account, onOpenNote, onCreateNote }) {
+function Dashboard({ notes, pdfs, images, account, onOpenNote, onCreateNote, onDeleteNote, canDeleteNote }) {
   const folders = useMemo(
     () => [...new Set(notes.map((note) => note.folder || 'Inbox'))],
     [notes],
@@ -82,9 +82,20 @@ function Dashboard({ notes, pdfs, images, account, onOpenNote, onCreateNote }) {
                 </Text>
               </HStack>
 
-              <Button className="comic-button blue full" onClick={() => onOpenNote(note.id)}>
-                <FiFileText /> Open Note
-              </Button>
+              <HStack className="note-card-actions" gap={2} align="stretch">
+                <Button className="comic-button blue" onClick={() => onOpenNote(note.id)}>
+                  <FiFileText /> Open Note
+                </Button>
+                {canDeleteNote?.(note) && (
+                  <Button
+                    className="comic-button pink note-delete-button"
+                    title="Delete note"
+                    onClick={() => onDeleteNote(note)}
+                  >
+                    <FiTrash2 />
+                  </Button>
+                )}
+              </HStack>
             </Box>
           )
         })}

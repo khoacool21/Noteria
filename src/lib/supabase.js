@@ -159,6 +159,19 @@ export async function saveNote(note, account) {
   return data
 }
 
+export async function deleteNote(noteId) {
+  if (!noteId) return false
+  if (noteId.startsWith('local-')) return true
+  if (!supabase) return false
+
+  const { error } = await supabase.from('notes').delete().eq('id', noteId)
+  if (error) {
+    console.warn('Could not delete note', error)
+    return false
+  }
+  return true
+}
+
 export async function fetchPdfs() {
   if (!supabase) return []
   const { data, error } = await supabase

@@ -15,6 +15,7 @@ import {
   FiImage,
   FiItalic,
   FiPenTool,
+  FiTrash2,
   FiType,
   FiUnderline,
 } from 'react-icons/fi'
@@ -63,7 +64,7 @@ const FontSize = Extension.create({
   },
 })
 
-function NoteEditor({ note, onChange, onImageUpload }) {
+function NoteEditor({ note, onChange, onImageUpload, onDelete, canDelete }) {
   const fileRef = useRef(null)
   const editor = useEditor({
     extensions: [
@@ -116,7 +117,7 @@ function NoteEditor({ note, onChange, onImageUpload }) {
 
   return (
     <Box className="comic-panel editor-panel">
-      <HStack justify="space-between" mb={3} align="start" gap={3}>
+      <HStack justify="space-between" mb={3} align="start" gap={3} flexWrap="wrap">
         <Box flex="1">
           <Text className="panel-kicker">Note Editor</Text>
           <Input
@@ -125,11 +126,18 @@ function NoteEditor({ note, onChange, onImageUpload }) {
             onChange={(event) => onChange({ title: event.target.value })}
           />
         </Box>
-        <Input
-          className="folder-input"
-          value={note.folder || 'Inbox'}
-          onChange={(event) => onChange({ folder: event.target.value })}
-        />
+        <HStack className="editor-note-actions" gap={2} align="start" flexWrap="wrap">
+          <Input
+            className="folder-input"
+            value={note.folder || 'Inbox'}
+            onChange={(event) => onChange({ folder: event.target.value })}
+          />
+          {canDelete && (
+            <Button className="comic-button pink delete-note-button" title="Delete note" onClick={onDelete}>
+              <FiTrash2 /> Delete Note
+            </Button>
+          )}
+        </HStack>
       </HStack>
 
       <HStack className="toolbar" gap={2} flexWrap="wrap">

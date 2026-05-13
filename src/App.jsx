@@ -24,6 +24,7 @@ import PDFViewer from './components/PDFViewer.jsx'
 import SummaryPanel from './components/SummaryPanel.jsx'
 import {
   createNote,
+  deleteNote,
   fetchAccount,
   fetchImages,
   fetchNotes,
@@ -184,6 +185,45 @@ function App() {
     }
   }
 
+  const handleDeleteNote = async (noteToDelete = activeNote) => {
+    if (!noteToDelete) return
+    if (!canDeleteNote(noteToDelete, account)) {
+      setStatus('You can only delete your own notes.')
+      return
+    }
+
+    const confirmed = window.confirm(
+      `Delete "${noteToDelete.title || 'this note'}"? This cannot be undone.`,
+    )
+    if (!confirmed) return
+
+    window.clearTimeout(saveTimer.current)
+    setIsSaving(true)
+    const removed = await deleteNote(noteToDelete.id)
+    setIsSaving(false)
+
+    if (!removed) {
+      setStatus('Delete failed. Check note permissions.')
+      return
+    }
+
+    const nextNotes = notes.filter((note) => note.id !== noteToDelete.id)
+    setNotes(nextNotes)
+    setPdfs((current) => current.filter((pdf) => pdf.note_id !== noteToDelete.id))
+    setImages((current) => current.filter((image) => image.note_id !== noteToDelete.id))
+
+    if (noteToDelete.id === activeNoteId) {
+      setActiveNoteId(nextNotes[0]?.id || null)
+      setActivePdfId(null)
+      setSummary('')
+      if (view === 'editor') {
+        setView('dashboard')
+      }
+    }
+
+    setStatus('Note deleted')
+  }
+
   const ensureSavedActiveNote = useCallback(async () => {
     if (!activeNote) return null
     if (!activeNote.id?.startsWith('local-')) return activeNote
@@ -321,6 +361,8 @@ function App() {
               account={account}
               onOpenNote={openNote}
               onCreateNote={handleCreateNote}
+              onDeleteNote={handleDeleteNote}
+              canDeleteNote={(note) => canDeleteNote(note, account)}
             />
           ) : view === 'profile' ? (
             <ProfilePage account={account} />
@@ -345,6 +387,8 @@ function App() {
                     note={activeNote}
                     onChange={handleNoteChange}
                     onImageUpload={handleImageUpload}
+                    onDelete={() => handleDeleteNote(activeNote)}
+                    canDelete={canDeleteNote(activeNote, account)}
                   />
                 </motion.div>
 
@@ -385,6 +429,11 @@ function StatusBubble({ status, isSaving }) {
       <Text fontWeight="800">{status}</Text>
     </HStack>
   )
+}
+
+function canDeleteNote(note, account) {
+  if (!note || !account) return false
+  return account.role === 'admin' || note.user_id === account.id || note.id?.startsWith('local-')
 }
 
 function stripHtml(html) {

@@ -173,6 +173,11 @@ select {
   margin-top: 16px;
 }
 
+.delete-note-button,
+.note-delete-button {
+  background: var(--pink) !important;
+}
+
 .speech-bubble {
   position: relative;
   min-height: 46px;
@@ -241,6 +246,10 @@ select {
   padding: 8px !important;
   background: #fff !important;
   font-weight: 900;
+}
+
+.editor-note-actions {
+  justify-content: flex-end;
 }
 
 .toolbar {
@@ -517,6 +526,20 @@ select {
 
 .note-card-stats {
   margin-top: auto;
+}
+
+.note-card-actions {
+  margin-top: 16px;
+}
+
+.note-card-actions .comic-button.blue {
+  flex: 1 1 auto;
+}
+
+.note-delete-button {
+  flex: 0 0 52px;
+  min-width: 52px !important;
+  padding: 0 !important;
 }
 
 .note-card-stats p {
