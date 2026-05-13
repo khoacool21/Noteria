@@ -22,10 +22,12 @@ import AdminDashboard from './components/AdminDashboard.jsx'
 import NoteEditor from './components/NoteEditor.jsx'
 import PDFViewer from './components/PDFViewer.jsx'
 import SummaryPanel from './components/SummaryPanel.jsx'
+import FolderNotesDialog from './components/FolderNotesDialog.jsx'
 import {
   createNote,
   deleteNote,
   fetchAccount,
+  fetchFolders,
   fetchImages,
   fetchNotes,
   fetchPdfs,
@@ -42,15 +44,19 @@ import {
 import { summarizeContent } from './lib/gemini.js'
 import './styles/app.css'
 
+const NOTE_CACHE_PREFIX = 'noterira:notes'
+
 function App() {
   const [account, setAccount] = useState(null)
   const [isAuthReady, setIsAuthReady] = useState(false)
   const [users, setUsers] = useState([])
+  const [folders, setFolders] = useState([])
   const [notes, setNotes] = useState([])
   const [pdfs, setPdfs] = useState([])
   const [images, setImages] = useState([])
   const [view, setView] = useState('dashboard')
   const [activeNoteId, setActiveNoteId] = useState(null)
+  const [activeFolderKey, setActiveFolderKey] = useState(null)
   const [activePdfId, setActivePdfId] = useState(null)
   const [summary, setSummary] = useState('')
   const [search, setSearch] = useState('')
@@ -58,12 +64,19 @@ function App() {
   const [isSummarizing, setIsSummarizing] = useState(false)
   const [status, setStatus] = useState('Ready for action')
   const saveTimer = useRef(null)
+  const notesRef = useRef([])
 
   const activeNote = notes.find((note) => note.id === activeNoteId) || notes[0]
   const activePdf = pdfs.find((pdf) => pdf.id === activePdfId) || null
   const activeNotePdfs = useMemo(
     () => pdfs.filter((pdf) => pdf.note_id === activeNoteId),
     [pdfs, activeNoteId],
+  )
+  const folderSummaries = useMemo(() => buildFolderSummaries(folders, notes), [folders, notes])
+  const activeFolder = folderSummaries.find((folder) => folder.key === activeFolderKey) || null
+  const activeFolderNotes = useMemo(
+    () => (activeFolder ? getNotesForFolder(notes, activeFolder) : []),
+    [activeFolder, notes],
   )
 
   const filteredNotes = useMemo(() => {
@@ -72,10 +85,29 @@ function App() {
     return notes.filter(
       (note) =>
         note.title.toLowerCase().includes(query) ||
-        note.folder?.toLowerCase().includes(query) ||
+        getNoteFolderName(note, folderSummaries).toLowerCase().includes(query) ||
         stripHtml(note.content).toLowerCase().includes(query),
     )
-  }, [notes, search])
+  }, [folderSummaries, notes, search])
+
+  const refreshFolders = useCallback(async () => {
+    const folderRows = await fetchFolders()
+    setFolders(folderRows)
+  }, [])
+
+  const setNotesAndCache = useCallback((updater, accountId = account?.id) => {
+    const nextNotes =
+      typeof updater === 'function' ? updater(notesRef.current) : updater
+
+    notesRef.current = nextNotes
+    setNotes(nextNotes)
+    writeCachedNotes(accountId, nextNotes)
+    return nextNotes
+  }, [account?.id])
+
+  useEffect(() => {
+    notesRef.current = notes
+  }, [notes])
 
   useEffect(() => {
     async function boot() {
@@ -90,10 +122,13 @@ function App() {
       const nextAccount = await fetchAccount(session)
       setAccount(nextAccount)
       setView('dashboard')
+      setFolders([])
+      notesRef.current = []
       setNotes([])
       setPdfs([])
       setImages([])
       setUsers([])
+      setActiveFolderKey(null)
     })
   }, [])
 
@@ -102,18 +137,22 @@ function App() {
     let ignore = false
 
     async function loadWorkspace() {
-      const [noteRows, pdfRows, imageRows, userRows] = await Promise.all([
+      const [folderRows, noteRows, pdfRows, imageRows, userRows] = await Promise.all([
+        fetchFolders(),
         fetchNotes(),
         fetchPdfs(),
         fetchImages(),
         account.role === 'admin' ? fetchUserProfiles() : Promise.resolve([]),
       ])
       if (ignore) return
-      setNotes(noteRows)
+      const cachedNoteRows = readCachedNotes(account.id)
+      const mergedNoteRows = mergeCachedNotes(noteRows, cachedNoteRows)
+      setFolders(folderRows)
+      setNotesAndCache(mergedNoteRows, account.id)
       setPdfs(pdfRows)
       setImages(imageRows)
       setUsers(userRows)
-      setActiveNoteId(noteRows[0]?.id || null)
+      setActiveNoteId(mergedNoteRows[0]?.id || null)
       setActivePdfId(null)
     }
 
@@ -121,42 +160,65 @@ function App() {
     return () => {
       ignore = true
     }
-  }, [account])
+  }, [account, setNotesAndCache])
 
-  const queueNoteSave = useCallback((nextNote) => {
-    setNotes((current) =>
+  const persistNote = useCallback(async (nextNote, options = {}) => {
+    setIsSaving(true)
+    const saved = await saveNote(nextNote, account)
+    setIsSaving(false)
+
+    if (saved) {
+      setNotesAndCache((current) =>
+        current.map((note) =>
+          note.id === nextNote.id
+            ? mergeSavedNoteMetadata(note, saved)
+            : note,
+        ),
+      )
+      if (nextNote.id !== saved.id) {
+        setActiveNoteId(saved.id)
+      }
+      refreshFolders()
+      setStatus(options.successStatus || 'Saved to Supabase')
+      return saved
+    }
+
+    setStatus(options.failureStatus || 'Saved locally. Check Supabase env/table setup.')
+    return null
+  }, [account, refreshFolders, setNotesAndCache])
+
+  const queueNoteSave = useCallback((nextNote, options = {}) => {
+    setNotesAndCache((current) =>
       current.map((note) => (note.id === nextNote.id ? nextNote : note)),
     )
     window.clearTimeout(saveTimer.current)
-    saveTimer.current = window.setTimeout(async () => {
-      setIsSaving(true)
-      const saved = await saveNote(nextNote, account)
-      setIsSaving(false)
-      if (saved) {
-        if (nextNote.id !== saved.id) {
-          setNotes((current) =>
-            current.map((note) => (note.id === nextNote.id ? saved : note)),
-          )
-          setActiveNoteId(saved.id)
-        }
-        setStatus('Saved to Supabase')
-      } else {
-        setStatus('Saved locally. Check Supabase env/table setup.')
-      }
-    }, 650)
-  }, [account])
+    if (options.immediate) {
+      persistNote(nextNote, options)
+      return
+    }
+    saveTimer.current = window.setTimeout(
+      () => persistNote(nextNote, options),
+      options.delay ?? 650,
+    )
+  }, [persistNote, setNotesAndCache])
 
-  const handleNoteChange = (patch) => {
-    if (!activeNote) return
+  const handleNoteChange = (patch, options = {}) => {
+    const targetNoteId = options.noteId || activeNote?.id
+    const baseNote = notesRef.current.find((note) => note.id === targetNoteId) || activeNote
+    if (!baseNote) return
+    const saveOptions = { ...options }
+    delete saveOptions.noteId
+
     queueNoteSave({
-      ...activeNote,
+      ...baseNote,
       ...patch,
       updated_at: new Date().toISOString(),
-    })
+    }, saveOptions)
   }
 
   const openNote = (id) => {
     setActiveNoteId(id)
+    setActiveFolderKey(null)
     setActivePdfId(null)
     setView('editor')
   }
@@ -166,19 +228,24 @@ function App() {
       id: `local-${crypto.randomUUID()}`,
       title: `Untitled Panel ${notes.length + 1}`,
       folder: folder.trim() || 'Inbox',
+      folder_id: null,
       content: '<p>Start sketching your thought here...</p>',
+      sketch_paths: [],
+      sketch_updated_at: null,
       updated_at: new Date().toISOString(),
     }
-    setNotes((current) => [optimistic, ...current])
+    setNotesAndCache((current) => [optimistic, ...current])
     setActiveNoteId(optimistic.id)
+    setActiveFolderKey(null)
     setActivePdfId(null)
     setView('editor')
     const saved = await createNote(optimistic, account)
     if (saved) {
-      setNotes((current) =>
+      setNotesAndCache((current) =>
         current.map((note) => (note.id === optimistic.id ? saved : note)),
       )
       setActiveNoteId(saved.id)
+      refreshFolders()
       setStatus('New note created in Supabase')
     } else {
       setStatus('New local note created')
@@ -208,7 +275,7 @@ function App() {
     }
 
     const nextNotes = notes.filter((note) => note.id !== noteToDelete.id)
-    setNotes(nextNotes)
+    setNotesAndCache(nextNotes)
     setPdfs((current) => current.filter((pdf) => pdf.note_id !== noteToDelete.id))
     setImages((current) => current.filter((image) => image.note_id !== noteToDelete.id))
 
@@ -237,12 +304,13 @@ function App() {
       return null
     }
 
-    setNotes((current) =>
+    setNotesAndCache((current) =>
       current.map((note) => (note.id === activeNote.id ? saved : note)),
     )
     setActiveNoteId(saved.id)
+    refreshFolders()
     return saved
-  }, [activeNote, account])
+  }, [activeNote, account, refreshFolders, setNotesAndCache])
 
   const handleImageUpload = async (file) => {
     if (!activeNote || !file) return null
@@ -329,12 +397,14 @@ function App() {
     <Flex minH="100vh" bg="var(--paper)" color="gray.900">
       <Sidebar
         notes={filteredNotes}
+        folders={folderSummaries}
         pdfs={activeNotePdfs}
         activeNoteId={activeNoteId}
         activePdfId={activePdfId}
         onSelectNote={(id) => {
           openNote(id)
         }}
+        onSelectFolder={setActiveFolderKey}
         onSelectPdf={(id) => setActivePdfId(id)}
         onGoHome={() => setView('dashboard')}
       />
@@ -358,7 +428,9 @@ function App() {
               notes={filteredNotes}
               pdfs={pdfs}
               images={images}
+              folders={folderSummaries}
               account={account}
+              onOpenFolder={setActiveFolderKey}
               onOpenNote={openNote}
               onCreateNote={handleCreateNote}
               onDeleteNote={handleDeleteNote}
@@ -385,6 +457,7 @@ function App() {
                 <motion.div initial={{ y: 18, opacity: 0 }} animate={{ y: 0, opacity: 1 }}>
                   <NoteEditor
                     note={activeNote}
+                    folders={folderSummaries}
                     onChange={handleNoteChange}
                     onImageUpload={handleImageUpload}
                     onDelete={() => handleDeleteNote(activeNote)}
@@ -418,6 +491,16 @@ function App() {
           )}
         </Box>
       </Box>
+
+      <FolderNotesDialog
+        folder={activeFolder}
+        notes={activeFolderNotes}
+        onClose={() => setActiveFolderKey(null)}
+        onOpenNote={openNote}
+        onCreateNote={handleCreateNote}
+        onDeleteNote={handleDeleteNote}
+        canDeleteNote={(note) => canDeleteNote(note, account)}
+      />
     </Flex>
   )
 }
@@ -434,6 +517,170 @@ function StatusBubble({ status, isSaving }) {
 function canDeleteNote(note, account) {
   if (!note || !account) return false
   return account.role === 'admin' || note.user_id === account.id || note.id?.startsWith('local-')
+}
+
+function readCachedNotes(accountId) {
+  if (!accountId) return []
+
+  try {
+    const stored = window.localStorage.getItem(getNoteCacheKey(accountId))
+    const parsed = JSON.parse(stored || '[]')
+    if (!Array.isArray(parsed)) return []
+    return parsed.map(normalizeCachedNote).filter(Boolean)
+  } catch (error) {
+    console.warn('Could not read local notes cache', error)
+    return []
+  }
+}
+
+function writeCachedNotes(accountId, notes) {
+  if (!accountId) return
+
+  try {
+    window.localStorage.setItem(
+      getNoteCacheKey(accountId),
+      JSON.stringify(notes.map(normalizeCachedNote).filter(Boolean)),
+    )
+  } catch (error) {
+    console.warn('Could not write local notes cache', error)
+  }
+}
+
+function mergeCachedNotes(remoteNotes, cachedNotes) {
+  const merged = new Map()
+  const keepCachedWithoutRemote = remoteNotes.length === 0
+
+  remoteNotes.map(normalizeCachedNote).filter(Boolean).forEach((note) => {
+    merged.set(note.id, note)
+  })
+
+  cachedNotes.map(normalizeCachedNote).filter(Boolean).forEach((cachedNote) => {
+    const remoteNote = merged.get(cachedNote.id)
+
+    if (!remoteNote) {
+      if (keepCachedWithoutRemote || cachedNote.id.startsWith('local-')) {
+        merged.set(cachedNote.id, cachedNote)
+      }
+      return
+    }
+
+    const cachedUpdatedAt = getNoteTime(cachedNote.updated_at)
+    const remoteUpdatedAt = getNoteTime(remoteNote.updated_at)
+    const cachedSketchUpdatedAt = getNoteTime(cachedNote.sketch_updated_at)
+    const remoteSketchUpdatedAt = getNoteTime(remoteNote.sketch_updated_at)
+
+    if (cachedUpdatedAt > remoteUpdatedAt) {
+      merged.set(cachedNote.id, { ...remoteNote, ...cachedNote })
+      return
+    }
+
+    if (cachedSketchUpdatedAt > remoteSketchUpdatedAt) {
+      merged.set(cachedNote.id, {
+        ...remoteNote,
+        sketch_paths: cachedNote.sketch_paths,
+        sketch_updated_at: cachedNote.sketch_updated_at,
+      })
+    }
+  })
+
+  return [...merged.values()].sort(
+    (a, b) => getNoteTime(b.updated_at) - getNoteTime(a.updated_at),
+  )
+}
+
+function normalizeCachedNote(note) {
+  if (!note?.id) return null
+
+  return {
+    ...note,
+    title: note.title || 'Untitled Panel',
+    folder: note.folder || 'Inbox',
+    content: note.content || '',
+    sketch_paths: Array.isArray(note.sketch_paths) ? note.sketch_paths : [],
+    sketch_updated_at: note.sketch_updated_at || null,
+    updated_at: note.updated_at || note.created_at || null,
+  }
+}
+
+function getNoteCacheKey(accountId) {
+  return `${NOTE_CACHE_PREFIX}:${accountId}`
+}
+
+function getNoteTime(value) {
+  const time = Date.parse(value || '')
+  return Number.isFinite(time) ? time : 0
+}
+
+function mergeSavedNoteMetadata(currentNote, savedNote) {
+  const currentUpdatedAt = getNoteTime(currentNote.updated_at)
+  const savedUpdatedAt = getNoteTime(savedNote.updated_at)
+  const currentSketchUpdatedAt = getNoteTime(currentNote.sketch_updated_at)
+  const savedSketchUpdatedAt = getNoteTime(savedNote.sketch_updated_at)
+  const editSource = savedUpdatedAt > currentUpdatedAt ? savedNote : currentNote
+  const sketchSource = savedSketchUpdatedAt > currentSketchUpdatedAt ? savedNote : editSource
+
+  return {
+    ...editSource,
+    id: savedNote.id,
+    folder_id: savedNote.folder_id,
+    folder: savedNote.folder,
+    user_id: savedNote.user_id,
+    user_name: savedNote.user_name,
+    created_at: savedNote.created_at,
+    updated_at: editSource.updated_at || savedNote.updated_at,
+    sketch_paths: Array.isArray(sketchSource.sketch_paths) ? sketchSource.sketch_paths : [],
+    sketch_updated_at: sketchSource.sketch_updated_at || null,
+  }
+}
+
+function buildFolderSummaries(folders, notes) {
+  const byKey = new Map()
+
+  folders.forEach((folder) => {
+    byKey.set(folder.id, {
+      ...folder,
+      key: folder.id,
+      noteCount: 0,
+      isLegacy: false,
+    })
+  })
+
+  notes.forEach((note) => {
+    const key = getNoteFolderKey(note)
+    const name = note.folder || 'Inbox'
+
+    if (!byKey.has(key)) {
+      byKey.set(key, {
+        id: note.folder_id || null,
+        key,
+        name,
+        user_id: note.user_id,
+        noteCount: 0,
+        isLegacy: !note.folder_id,
+      })
+    }
+
+    byKey.get(key).noteCount += 1
+  })
+
+  return [...byKey.values()].sort((a, b) => a.name.localeCompare(b.name))
+}
+
+function getNotesForFolder(notes, folder) {
+  return notes.filter((note) => getNoteFolderKey(note) === folder.key)
+}
+
+function getNoteFolderKey(note) {
+  if (note.folder_id) return note.folder_id
+  return `legacy-${note.user_id || 'local'}-${slugFolder(note.folder || 'Inbox')}`
+}
+
+function getNoteFolderName(note, folders) {
+  return folders.find((folder) => folder.key === getNoteFolderKey(note))?.name || note.folder || 'Inbox'
+}
+
+function slugFolder(name) {
+  return name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-')
 }
 
 function stripHtml(html) {

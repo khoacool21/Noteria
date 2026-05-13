@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Box, Button, HStack, Input, Text } from '@chakra-ui/react'
 import { EditorContent, useEditor } from '@tiptap/react'
 import { Extension } from '@tiptap/core'
@@ -12,6 +12,7 @@ import '@fontsource/comic-neue/700.css'
 import '@fontsource/permanent-marker'
 import {
   FiBold,
+  FiEdit3,
   FiImage,
   FiItalic,
   FiPenTool,
@@ -19,6 +20,7 @@ import {
   FiType,
   FiUnderline,
 } from 'react-icons/fi'
+import SketchCanvasPanel from './SketchCanvasPanel.jsx'
 
 const fonts = [
   { label: 'Inter', value: 'Inter, sans-serif' },
@@ -64,8 +66,17 @@ const FontSize = Extension.create({
   },
 })
 
-function NoteEditor({ note, onChange, onImageUpload, onDelete, canDelete }) {
+function NoteEditor({ note, folders, onChange, onImageUpload, onDelete, canDelete }) {
   const fileRef = useRef(null)
+  const noteIdRef = useRef(note?.id)
+  const onChangeRef = useRef(onChange)
+  const [mode, setMode] = useState('text')
+
+  const emitChange = (patch, options = {}) => {
+    if (!noteIdRef.current) return
+    onChangeRef.current(patch, { ...options, noteId: options.noteId || noteIdRef.current })
+  }
+
   const editor = useEditor({
     extensions: [
       StarterKit,
@@ -90,9 +101,17 @@ function NoteEditor({ note, onChange, onImageUpload, onDelete, canDelete }) {
       },
     },
     onUpdate: ({ editor: activeEditor }) => {
-      onChange({ content: activeEditor.getHTML() })
+      emitChange({ content: activeEditor.getHTML() })
     },
   })
+
+  useEffect(() => {
+    noteIdRef.current = note?.id
+  }, [note?.id])
+
+  useEffect(() => {
+    onChangeRef.current = onChange
+  }, [onChange])
 
   useEffect(() => {
     if (!editor || note?.content === editor.getHTML()) return
@@ -123,15 +142,21 @@ function NoteEditor({ note, onChange, onImageUpload, onDelete, canDelete }) {
           <Input
             className="title-input"
             value={note.title}
-            onChange={(event) => onChange({ title: event.target.value })}
+            onChange={(event) => emitChange({ title: event.target.value })}
           />
         </Box>
         <HStack className="editor-note-actions" gap={2} align="start" flexWrap="wrap">
           <Input
             className="folder-input"
+            list="note-editor-folders"
             value={note.folder || 'Inbox'}
-            onChange={(event) => onChange({ folder: event.target.value })}
+            onChange={(event) => emitChange({ folder: event.target.value, folder_id: null })}
           />
+          <datalist id="note-editor-folders">
+            {folders?.map((folder) => (
+              <option value={folder.name} key={folder.key} />
+            ))}
+          </datalist>
           {canDelete && (
             <Button className="comic-button pink delete-note-button" title="Delete note" onClick={onDelete}>
               <FiTrash2 /> Delete Note
@@ -140,7 +165,25 @@ function NoteEditor({ note, onChange, onImageUpload, onDelete, canDelete }) {
         </HStack>
       </HStack>
 
-      <HStack className="toolbar" gap={2} flexWrap="wrap">
+      <HStack className="editor-mode-switch" gap={2} flexWrap="wrap">
+        <Button
+          className={mode === 'text' ? 'write-mode-button active' : 'write-mode-button'}
+          title="Write"
+          onClick={() => setMode('text')}
+        >
+          <FiPenTool /> Write
+        </Button>
+        <Button
+          className={mode === 'sketch' ? 'sketch-mode-button active' : 'sketch-mode-button'}
+          title="Sketch"
+          onClick={() => setMode('sketch')}
+        >
+          <FiEdit3 /> Sketch
+        </Button>
+      </HStack>
+
+      {mode === 'text' && (
+        <HStack className="toolbar" gap={2} flexWrap="wrap">
         <Button
           title="Bold"
           className={editor?.isActive('bold') ? 'tool-active' : ''}
@@ -218,9 +261,30 @@ function NoteEditor({ note, onChange, onImageUpload, onDelete, canDelete }) {
           hidden
           onChange={(event) => handleImageFile(event.target.files?.[0])}
         />
-      </HStack>
+        </HStack>
+      )}
 
-      <EditorContent editor={editor} />
+      {mode === 'text' ? (
+        <EditorContent editor={editor} />
+      ) : (
+        <SketchCanvasPanel
+          note={note}
+          onSketchChange={(paths, noteId) =>
+            emitChange(
+              {
+                sketch_paths: paths,
+                sketch_updated_at: new Date().toISOString(),
+              },
+              {
+                noteId,
+                immediate: true,
+                successStatus: 'Sketch saved to Supabase',
+                failureStatus: 'Sketch stayed local. Apply the Supabase schema updates.',
+              },
+            )
+          }
+        />
+      )}
     </Box>
   )
 }

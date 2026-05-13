@@ -3,15 +3,15 @@ import { FiBookOpen, FiFileText, FiFolder } from 'react-icons/fi'
 
 function Sidebar({
   notes,
+  folders,
   pdfs,
   activeNoteId,
   activePdfId,
+  onSelectFolder,
   onSelectNote,
   onSelectPdf,
   onGoHome,
 }) {
-  const folders = [...new Set(notes.map((note) => note.folder || 'Inbox'))]
-
   return (
     <Box className="sidebar" display={{ base: 'none', md: 'block' }}>
       <Box className="brand-burst" role="button" tabIndex={0} onClick={onGoHome}>
@@ -26,10 +26,16 @@ function Sidebar({
             <Text>Folders</Text>
           </HStack>
           {folders.map((folder) => (
-            <Box className="folder-chip" key={folder}>
-              {folder}
-            </Box>
+            <Button
+              className="folder-chip folder-chip-button"
+              key={folder.key}
+              onClick={() => onSelectFolder(folder.key)}
+            >
+              <Text as="span">{folder.name}</Text>
+              <Text as="span">{folder.noteCount}</Text>
+            </Button>
           ))}
+          {folders.length === 0 && <Text className="muted">No folders yet.</Text>}
         </Box>
 
         <Box>

@@ -68,7 +68,9 @@ select {
 }
 
 .folder-chip {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
   margin: 0 8px 8px 0;
   padding: 6px 10px;
   border: 3px solid var(--ink);
@@ -77,6 +79,21 @@ select {
   font-size: 13px;
   font-weight: 900;
   box-shadow: 3px 3px 0 var(--ink);
+}
+
+.folder-chip-button {
+  height: auto !important;
+  min-height: 36px !important;
+  color: var(--ink) !important;
+}
+
+.folder-chip-button span:last-child {
+  min-width: 24px;
+  padding: 2px 6px;
+  border: 2px solid var(--ink);
+  border-radius: 999px;
+  background: var(--yellow);
+  text-align: center;
 }
 
 .nav-card {
@@ -151,6 +168,9 @@ select {
 
 .comic-button:hover,
 .toolbar button:hover,
+.sketch-toolbar button:hover,
+.write-mode-button:hover,
+.sketch-mode-button:hover,
 .mini-button:hover {
   transform: translate(2px, 2px);
   box-shadow: 3px 3px 0 var(--ink);
@@ -162,6 +182,11 @@ select {
 
 .comic-button.pink {
   background: var(--pink) !important;
+}
+
+.comic-button.red,
+.sketch-mode-button {
+  background: #e02424 !important;
 }
 
 .comic-button.ghost {
@@ -252,6 +277,36 @@ select {
   justify-content: flex-end;
 }
 
+.editor-mode-switch {
+  margin: 14px 0 10px;
+}
+
+.write-mode-button,
+.sketch-mode-button {
+  gap: 8px;
+  min-height: 48px !important;
+  border: 4px solid var(--ink) !important;
+  border-radius: 6px !important;
+  color: var(--ink) !important;
+  font-weight: 900 !important;
+  box-shadow: 5px 5px 0 var(--ink);
+}
+
+.write-mode-button {
+  background: #fff !important;
+}
+
+.sketch-mode-button {
+  color: #fff !important;
+  min-width: 132px !important;
+}
+
+.write-mode-button.active,
+.sketch-mode-button.active {
+  transform: translate(2px, 2px);
+  box-shadow: 3px 3px 0 var(--ink);
+}
+
 .toolbar {
   margin: 12px 0;
   padding: 10px;
@@ -269,6 +324,13 @@ select {
   background: #fff !important;
   color: var(--ink) !important;
   box-shadow: 3px 3px 0 var(--ink);
+}
+
+.toolbar button:disabled,
+.select-tool:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  transform: none;
 }
 
 .pdf-summary-button {
@@ -338,6 +400,141 @@ select {
   border: 4px solid var(--ink);
   border-radius: 6px;
   box-shadow: 5px 5px 0 var(--ink);
+}
+
+.sketch-panel {
+  display: grid;
+  gap: 12px;
+}
+
+.sketch-toolbar {
+  position: relative;
+  padding: 10px;
+  border: 4px solid var(--ink);
+  border-radius: 7px;
+  background: #d9f99d;
+}
+
+.sketch-toolbar button {
+  min-width: 38px !important;
+  height: 38px !important;
+  border: 3px solid var(--ink) !important;
+  border-radius: 5px !important;
+  background: #fff !important;
+  color: var(--ink) !important;
+  box-shadow: 3px 3px 0 var(--ink);
+}
+
+.sketch-toolbar button.tool-active {
+  background: var(--green) !important;
+}
+
+.sketch-swatches {
+  padding-left: 6px;
+}
+
+.sketch-toolbar .swatch {
+  width: 30px !important;
+  min-width: 30px !important;
+  height: 30px !important;
+  padding: 0 !important;
+  border-radius: 999px !important;
+  background: var(--swatch-color) !important;
+}
+
+.sketch-toolbar .swatch.active {
+  outline: 3px solid var(--ink);
+  outline-offset: 2px;
+}
+
+.sketch-color-control {
+  position: relative;
+}
+
+.sketch-toolbar .custom-color-button {
+  width: auto !important;
+  min-width: 92px !important;
+  padding: 0 10px !important;
+  gap: 8px;
+  font-weight: 900 !important;
+}
+
+.color-preview {
+  width: 18px;
+  height: 18px;
+  border: 2px solid var(--ink);
+  border-radius: 999px;
+}
+
+.color-popover {
+  position: absolute;
+  top: calc(100% + 10px);
+  left: 0;
+  z-index: 10;
+  width: 228px;
+  padding: 12px;
+  border: 4px solid var(--ink);
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 5px 5px 0 var(--ink);
+}
+
+.color-popover .react-colorful {
+  width: 100%;
+  height: 170px;
+}
+
+.color-popover .react-colorful__saturation {
+  border-radius: 5px 5px 0 0;
+}
+
+.color-popover .react-colorful__hue {
+  height: 24px;
+  border-radius: 0 0 5px 5px;
+}
+
+.hex-input-row {
+  margin-top: 10px;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.hex-input-row input {
+  width: 100%;
+  min-height: 34px;
+  border: 3px solid var(--ink);
+  border-radius: 5px;
+  padding: 0 8px;
+  font-weight: 900;
+}
+
+.stroke-size-control {
+  min-width: 230px;
+  padding: 0 8px;
+  font-size: 12px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.stroke-slider {
+  width: 124px;
+  accent-color: var(--pink);
+}
+
+.stroke-value {
+  min-width: 38px;
+  padding: 4px 6px;
+  border: 2px solid var(--ink);
+  border-radius: 5px;
+  background: #fff;
+  text-align: center;
+}
+
+.sketch-canvas-shell {
+  overflow: hidden;
+  border: 4px solid var(--ink);
+  border-radius: 6px;
+  background: #fff;
 }
 
 .pdf-scroll {
@@ -447,6 +644,10 @@ select {
   line-height: 1;
 }
 
+.dashboard-folder-strip {
+  margin-bottom: 20px;
+}
+
 .dashboard-folder-input {
   min-height: 46px;
   border: 4px solid var(--ink) !important;
@@ -551,6 +752,71 @@ select {
 
 .empty-dashboard {
   padding: 32px;
+  font-weight: 900;
+}
+
+.folder-dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(23, 23, 23, 0.42);
+}
+
+.folder-dialog {
+  width: min(760px, 100%);
+  max-height: min(760px, calc(100vh - 48px));
+  overflow: auto;
+  padding: 22px;
+  border: 5px solid var(--ink);
+  border-radius: 8px;
+  background: var(--cream);
+  box-shadow: 9px 9px 0 var(--ink);
+}
+
+.folder-dialog-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 6px;
+  font-family: Bangers, Inter, sans-serif;
+  font-size: 42px;
+  line-height: 1;
+  letter-spacing: 0;
+  overflow-wrap: anywhere;
+}
+
+.folder-note-list {
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.folder-note-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 16px;
+  align-items: center;
+  padding: 14px;
+  border: 4px solid var(--ink);
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 4px 4px 0 var(--ink);
+}
+
+.folder-note-row .note-card-preview {
+  min-height: 0;
+  margin: 8px 0 0;
+  -webkit-line-clamp: 2;
+}
+
+.empty-folder {
+  margin-top: 18px;
+  padding: 20px;
+  border: 4px solid var(--ink);
+  border-radius: 8px;
+  background: #fff;
   font-weight: 900;
 }
 
@@ -773,5 +1039,17 @@ select {
 
   .auth-poster {
     min-height: 360px;
+  }
+
+  .folder-dialog-backdrop {
+    padding: 14px;
+  }
+
+  .folder-note-row {
+    grid-template-columns: 1fr;
+  }
+
+  .stroke-size-control {
+    width: 100%;
   }
 }

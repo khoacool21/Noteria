@@ -2,12 +2,23 @@ import { useMemo, useState } from 'react'
 import { Box, Button, Grid, HStack, Input, Text, VStack } from '@chakra-ui/react'
 import { FiFileText, FiFolder, FiImage, FiPlus, FiTrash2, FiUploadCloud } from 'react-icons/fi'
 
-function Dashboard({ notes, pdfs, images, account, onOpenNote, onCreateNote, onDeleteNote, canDeleteNote }) {
-  const folders = useMemo(
-    () => [...new Set(notes.map((note) => note.folder || 'Inbox'))],
-    [notes],
+function Dashboard({
+  notes,
+  pdfs,
+  images,
+  folders,
+  account,
+  onOpenFolder,
+  onOpenNote,
+  onCreateNote,
+  onDeleteNote,
+  canDeleteNote,
+}) {
+  const folderNames = useMemo(
+    () => [...new Set(folders.map((item) => item.name))],
+    [folders],
   )
-  const [folder, setFolder] = useState(folders[0] || 'Inbox')
+  const [folder, setFolder] = useState(folderNames[0] || 'Inbox')
 
   return (
     <Box className="dashboard">
@@ -34,7 +45,7 @@ function Dashboard({ notes, pdfs, images, account, onOpenNote, onCreateNote, onD
               placeholder="Inbox"
             />
             <datalist id="dashboard-folders">
-              {folders.map((item) => (
+              {folderNames.map((item) => (
                 <option value={item} key={item} />
               ))}
             </datalist>
@@ -44,6 +55,20 @@ function Dashboard({ notes, pdfs, images, account, onOpenNote, onCreateNote, onD
           </HStack>
         </Box>
       </Box>
+
+      <HStack className="dashboard-folder-strip" gap={2} flexWrap="wrap">
+        {folders.map((item) => (
+          <Button
+            className="folder-chip folder-chip-button"
+            key={item.key}
+            onClick={() => onOpenFolder(item.key)}
+          >
+            <FiFolder />
+            <Text as="span">{item.name}</Text>
+            <Text as="span">{item.noteCount}</Text>
+          </Button>
+        ))}
+      </HStack>
 
       <Grid className="note-grid">
         {notes.map((note) => {

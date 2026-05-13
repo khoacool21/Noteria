@@ -103,6 +103,19 @@ export async function updateUserRole(userId, role) {
   return data
 }
 
+export async function fetchFolders() {
+  if (!supabase) return []
+  const { data, error } = await supabase
+    .from('folders')
+    .select('*')
+    .order('name', { ascending: true })
+  if (error) {
+    console.warn('Could not fetch folders', error)
+    return []
+  }
+  return data || []
+}
+
 export async function fetchNotes() {
   if (!supabase) return []
   const { data, error } = await supabase
@@ -118,10 +131,14 @@ export async function fetchNotes() {
 
 export async function createNote(note, account) {
   if (!supabase || !account) return null
+  const folder = await resolveNoteFolder(note, account)
   const insertable = {
     title: note.title,
-    folder: note.folder || 'Inbox',
+    folder_id: folder?.id || note.folder_id || null,
+    folder: folder?.name || cleanFolderName(note.folder),
     content: note.content,
+    sketch_paths: normalizeSketchPaths(note.sketch_paths),
+    sketch_updated_at: note.sketch_updated_at || null,
     updated_at: note.updated_at,
     user_id: account.id,
     user_name: account.profile?.name || account.email || 'User',
@@ -139,17 +156,21 @@ export async function saveNote(note, account) {
   if (note.id?.startsWith('local-')) {
     return createNote(note, account)
   }
+  const folder = await resolveNoteFolder(note, account)
   const { data, error } = await supabase
     .from('notes')
-    .upsert({
-      id: note.id,
+    .update({
       user_id: note.user_id || account.id,
+      folder_id: folder?.id || note.folder_id || null,
       user_name: note.user_name || account.profile?.name || account.email || 'User',
       title: note.title,
-      folder: note.folder || 'Inbox',
+      folder: folder?.name || cleanFolderName(note.folder),
       content: note.content,
+      sketch_paths: normalizeSketchPaths(note.sketch_paths),
+      sketch_updated_at: note.sketch_updated_at || null,
       updated_at: note.updated_at,
     })
+    .eq('id', note.id)
     .select()
     .single()
   if (error) {
@@ -157,6 +178,46 @@ export async function saveNote(note, account) {
     return null
   }
   return data
+}
+
+async function resolveNoteFolder(note, account) {
+  if (!supabase || !account) return null
+  if (note.folder_id) return null
+
+  const name = cleanFolderName(note.folder)
+  const ownerId = note.user_id || account.id
+  const { data: existing, error: readError } = await supabase
+    .from('folders')
+    .select('*')
+    .eq('user_id', ownerId)
+    .eq('name', name)
+    .maybeSingle()
+
+  if (readError) {
+    console.warn('Could not read folder', readError)
+    return null
+  }
+  if (existing) return existing
+
+  const { data, error } = await supabase
+    .from('folders')
+    .insert({ user_id: ownerId, name })
+    .select()
+    .single()
+
+  if (error) {
+    console.warn('Could not create folder', error)
+    return null
+  }
+  return data
+}
+
+function cleanFolderName(name) {
+  return name?.trim() || 'Inbox'
+}
+
+function normalizeSketchPaths(paths) {
+  return Array.isArray(paths) ? paths : []
 }
 
 export async function deleteNote(noteId) {
